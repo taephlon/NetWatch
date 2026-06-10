@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>NetWatch</title>
+  <style>
+    body {
+      font-family: monospace;
+      background: #0f0f0f;
+      color: #00ff88;
+      padding: 20px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      border-bottom: 1px solid #333;
+      padding: 8px;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>NetWatch Dashboard</h1>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Source</th>
+        <th>Destination</th>
+        <th>Port</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+<script>
+async function load() {
+  const res = await fetch("/connections");
+  const data = await res.json();
+
+  const rows = document.getElementById("rows");
+  rows.innerHTML = "";
+
+  data.forEach(c => {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${c.src_ip}</td>
+      <td>${c.dst_ip}</td>
+      <td>${c.dst_port}</td>
+    `;
+    rows.appendChild(row);
+  });
+}
+
+setInterval(load, 2000);
+load();
+</script>
+
+</body>
+</html>

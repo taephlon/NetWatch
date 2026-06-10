@@ -1,0 +1,15 @@
+/target
+
+#Cargo Files
+*.lock
+
+#Compiled Program
+/target/
+*.db
+*bpf.o
+
+#kernel header
+*h
+
+#test html
+/index.html
