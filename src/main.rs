@@ -5,7 +5,6 @@ use std::net::Ipv4Addr;
 use chrono::Utc;
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
-use futures_util::{StreamExt, SinkExt};
 use axum::{
     Router,
     routing::get,
@@ -16,16 +15,13 @@ use axum::{
 };
 
 use tower_http::services::ServeDir;
+use state::AppState;
 
 mod db;
 mod models;
 mod api;
-
-#[derive(Clone)]
-struct AppState {
-    db: Arc<Mutex<rusqlite::Connection>>,
-    tx: broadcast::Sender<String>,
-}
+mod state;
+mod websocket;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -90,7 +86,8 @@ async fn handle_socket(
 async fn main() -> Result<()> {
     let obj_path = Path::new("ebpf/connect.bpf.o");
 
-    let (tx, _rx) = broadcast::channel::<String>(100);
+    let (tx, _) = broadcast::channel::<String>(1000);
+    let tx_ringbuf = tx.clone();
 
     let open_obj = ObjectBuilder::default().open_file(obj_path)?;
     let mut obj = open_obj.load()?;
@@ -128,6 +125,19 @@ async fn main() -> Result<()> {
 
         let src = Ipv4Addr::from(event.saddr.to_be());
         let dst = Ipv4Addr::from(event.daddr.to_be());
+        
+        let ws_event = models::WsConnectionEvent {
+    pid: event.pid,
+
+    src_ip: src.to_string(),
+    dst_ip: dst.to_string(),
+
+    src_port: event.sport,
+    dst_port: event.dport,
+
+    old_state: event.oldstate,
+    new_state: event.newstate,
+};
 
         let msg = format!(
             "PID={} {}:{} -> {}:{}",
@@ -153,7 +163,11 @@ async fn main() -> Result<()> {
         if let Ok(conn) = db_clone.lock() {
             let _ = db::insert_connection(&conn, &record);
         }
-
+        
+        if let Ok(json) = serde_json::to_string(&ws_event) {
+    let _ = tx_ringbuf.send(json);
+}
+        
         0
     })?;
 
@@ -161,7 +175,7 @@ async fn main() -> Result<()> {
 
     let app = Router::new()
         .route("/connections", get(connections_handler))
-        .route("/ws", get(ws_handler))
+        .route("/ws", get(websocket::ws_handler))
         .fallback_service(ServeDir::new("web"))
         .with_state(state);
 

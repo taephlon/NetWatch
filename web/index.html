@@ -1,62 +1,63 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <title>NetWatch</title>
-  <style>
-    body {
-      font-family: monospace;
-      background: #0f0f0f;
-      color: #00ff88;
-      padding: 20px;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-
-    th, td {
-      border-bottom: 1px solid #333;
-      padding: 8px;
-    }
-  </style>
-</head>
-
 <body>
-  <h1>NetWatch Dashboard</h1>
 
-  <table>
+<h1>NetWatch Live</h1>
+
+<table id="connections" border="1">
     <thead>
-      <tr>
-        <th>Source</th>
-        <th>Destination</th>
-        <th>Port</th>
-      </tr>
+        <tr>
+            <th>PID</th>
+            <th>Source IP</th>
+            <th>Source Port</th>
+            <th>Destination IP</th>
+            <th>Destination Port</th>
+            <th>State</th>
+        </tr>
     </thead>
-    <tbody id="rows"></tbody>
-  </table>
+
+    <tbody>
+    </tbody>
+</table>
 
 <script>
-async function load() {
-  const res = await fetch("/connections");
-  const data = await res.json();
-
-  const rows = document.getElementById("rows");
-  rows.innerHTML = "";
-
-  data.forEach(c => {
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td>${c.src_ip}</td>
-      <td>${c.dst_ip}</td>
-      <td>${c.dst_port}</td>
-    `;
-    rows.appendChild(row);
-  });
+function tcpState(state) {
+    switch (state) {
+        case 1: return "ESTABLISHED";
+        case 2: return "SYN_SENT";
+        case 3: return "SYN_RECV";
+        case 4: return "FIN_WAIT1";
+        case 5: return "FIN_WAIT2";
+        case 6: return "TIME_WAIT";
+        case 7: return "CLOSE";
+        case 8: return "CLOSE_WAIT";
+        case 9: return "LAST_ACK";
+        case 10: return "LISTEN";
+        case 11: return "CLOSING";
+        default: return state;
+    }
 }
 
-setInterval(load, 2000);
-load();
+const ws = new WebSocket("ws://localhost:3000/ws");
+
+ws.onmessage = (event) => {
+    const conn = JSON.parse(event.data);
+
+    const row = document.createElement("tr");
+
+    row.innerHTML = `
+        <td>${conn.pid}</td>
+        <td>${conn.src_ip}</td>
+        <td>${conn.src_port}</td>
+        <td>${conn.dst_ip}</td>
+        <td>${conn.dst_port}</td>
+        <td>${conn.old_state} &rarr; ${conn.new_state}</td>
+    `;
+
+    document
+        .querySelector("#connections tbody")
+        .prepend(row);
+};
 </script>
 
 </body>

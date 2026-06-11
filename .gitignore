@@ -13,3 +13,6 @@
 
 #test html
 /index.html
+
+#gitignore
+.gitignore
