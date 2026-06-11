@@ -139,6 +139,11 @@ async fn main() -> Result<()> {
     new_state: event.newstate,
 };
 
+
+if let Ok(json) = serde_json::to_string(&ws_event) {
+    let _ = tx_ringbuf.send(json);
+}
+
         let ws_event = serde_json::json!({
     "pid": event.pid,
     "src_ip": src.to_string(),
@@ -160,6 +165,20 @@ let _ = tx_ringbuf.send(ws_event.to_string());
             old_state: event.oldstate,
             new_state: event.newstate,
         };
+
+let ws_event = api::ConnectionRow {
+    id: 0,
+    timestamp: record.timestamp,
+
+    src_ip: record.src_ip.clone(),
+    dst_ip: record.dst_ip.clone(),
+
+    src_port: record.src_port,
+    dst_port: record.dst_port,
+
+    old_state: record.old_state,
+    new_state: record.new_state,
+};
 
         if let Ok(conn) = db_clone.lock() {
             let _ = db::insert_connection(&conn, &record);
