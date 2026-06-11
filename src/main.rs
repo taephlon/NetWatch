@@ -139,16 +139,17 @@ async fn main() -> Result<()> {
     new_state: event.newstate,
 };
 
-        let msg = format!(
-            "PID={} {}:{} -> {}:{}",
-            event.pid,
-            src,
-            event.sport,
-            dst,
-            event.dport
-        );
+        let ws_event = serde_json::json!({
+    "pid": event.pid,
+    "src_ip": src.to_string(),
+    "dst_ip": dst.to_string(),
+    "src_port": event.sport,
+    "dst_port": event.dport,
+    "old_state": event.oldstate,
+    "new_state": event.newstate
+});
 
-        let _ = tx_ring.send(msg);
+let _ = tx_ringbuf.send(ws_event.to_string());
 
         let record = models::Connection {
             timestamp: Utc::now().timestamp(),
