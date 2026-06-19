@@ -4,6 +4,10 @@ use serde::{Serialize, Deserialize};
 pub struct Connection {
     pub pid: u32,
 
+    pub process_name: String,
+    pub executable: String,
+
+
     pub timestamp: i64,
 
     pub src_ip: String,
@@ -14,6 +18,11 @@ pub struct Connection {
 
     pub old_state: u32,
     pub new_state: u32,
+
+    pub hostname: String,
+
+    pub risk_score: u8,
+    pub threat_label: String
 }
 
 #[derive(Debug, Serialize, Deserialize)]

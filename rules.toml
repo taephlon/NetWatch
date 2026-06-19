@@ -1,0 +1,9 @@
+[[rule]]
+name = "Telnet"
+port = 23
+risk = 90
+
+[[rule]]
+name = "IRC"
+port = 6667
+risk = 75

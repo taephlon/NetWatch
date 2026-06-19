@@ -22,6 +22,9 @@ mod api;
 mod state;
 mod models;
 mod websocket;
+mod dns;
+mod process;
+mod threat;
 
 use state::AppState;
 
@@ -128,10 +131,33 @@ async fn main() -> Result<()> {
                     event.daddr.to_be()
                 );
 
+            let hostname =
+                dns::reverse_lookup(
+                     &dst.to_string()
+             );
+    
+            let (risk_score, threat_label) =
+                threat::classify(
+                  &hostname,
+                    event.dport,
+                );
+
+            let process_name =
+                process::process_name(event.pid);
+
+            let executable =
+                process::executable(event.pid);
+
+            let dst =
+                Ipv4Addr::from(event.daddr.to_be());
+
             let record =
                 models::Connection {
 
                     pid: event.pid,
+
+                    process_name,
+                    executable,
 
                     timestamp:
                         Utc::now()
@@ -154,6 +180,11 @@ async fn main() -> Result<()> {
 
                     new_state:
                         event.newstate,
+
+                    hostname,
+
+                    risk_score,
+                    threat_label
                 };
 
             if let Ok(conn)
@@ -172,6 +203,9 @@ async fn main() -> Result<()> {
                     id: 0,
 
                     pid: record.pid,
+
+                    process_name: record.process_name.clone(),
+                    executable: record.executable.clone(),
 
                     timestamp:
                         record.timestamp,
@@ -193,6 +227,13 @@ async fn main() -> Result<()> {
 
                     new_state:
                         record.new_state,
+
+                    hostname: 
+                        record.hostname.clone(),
+
+                    risk_score: record.risk_score,
+                    threat_label: record.threat_label.clone(),
+
                 };
 
             if let Ok(json)

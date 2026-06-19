@@ -66,8 +66,13 @@ tbody tr:nth-child(even) {
             <th>Source IP</th>
             <th>Source Port</th>
             <th>Destination IP</th>
+            <th>Process</th>
+            <th>Executable</th>
+            <th>Hostname</th>
             <th>Destination Port</th>
             <th>State</th>
+            <th>Threat</th>
+            <th>Risk</th>
             <th>Timestamp</th>
         </tr>
     </thead>
@@ -159,12 +164,17 @@ function addRow(conn) {
         <td>${conn.src_ip}</td>
         <td>${conn.src_port}</td>
         <td>${conn.dst_ip}</td>
+        <td>${conn.process_name}</td>
+        <td>${conn.executable}</td>
+        <td>${conn.hostname}</td>
         <td>${conn.dst_port}</td>
         <td>
             ${tcpState(conn.old_state)}
             →
             ${tcpState(conn.new_state)}
         </td>
+        <td>${conn.risk_score}</td>
+        <td>${conn.threat_label}</td>
         <td>${timestamp}</td>
     `;
 

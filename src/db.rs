@@ -19,7 +19,10 @@ pub fn init_db() -> Result<Connection> {
 
             pid INTEGER NOT NULL,
 
-            timestamp INTEGER NOT NULL,
+            process_name TEXT,
+            executable TEXT,
+
+            timestamp INTEGER,
 
             src_ip TEXT NOT NULL,
             dst_ip TEXT NOT NULL,
@@ -28,7 +31,10 @@ pub fn init_db() -> Result<Connection> {
             dst_port INTEGER NOT NULL,
 
             old_state INTEGER NOT NULL,
-            new_state INTEGER NOT NULL
+            new_state INTEGER NOT NULL,
+
+            risk_score INTEGER,
+            threat_label TEXT
         )
         ",
         [],
@@ -57,15 +63,19 @@ pub fn insert_connection(
             dst_port,
 
             old_state,
-            new_state
+            new_state,
+            hostname
         )
         VALUES
         (
-            ?, ?, ?, ?, ?, ?, ?, ?
+            ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ",
         (
             ev.pid,
+
+            &ev.process_name,
+            &ev.executable,
 
             ev.timestamp,
 
@@ -77,6 +87,10 @@ pub fn insert_connection(
 
             ev.old_state,
             ev.new_state,
+
+            &ev.hostname,
+            &ev.risk_score,
+            &ev.threat_label,
         ),
     )?;
 
@@ -96,6 +110,7 @@ pub fn get_connections(
                 timestamp,
                 src_ip,
                 dst_ip,
+                hostname,
                 src_port,
                 dst_port,
                 old_state,
@@ -124,6 +139,14 @@ pub fn get_connections(
 
             old_state: row.get(7)?,
             new_state: row.get(8)?,
+
+            hostname: row.get(9)?,
+
+            process_name: row.get(10)?,
+            executable: row.get(11)?,
+
+            risk_score: row.get(12)?,
+            threat_label: row.get(13)?,
         })
 
     })?;
