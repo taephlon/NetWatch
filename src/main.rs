@@ -1,27 +1,29 @@
 use anyhow::Result;
-use libbpf_rs::{ObjectBuilder, RingBufferBuilder, MapCore};
-use std::path::Path;
-use std::net::Ipv4Addr;
+use libbpf_rs::{MapCore, ObjectBuilder, RingBufferBuilder};
+
+use std::{
+    net::Ipv4Addr,
+    path::Path,
+    sync::{Arc, Mutex},
+};
+
 use chrono::Utc;
-use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
+
 use axum::{
-    Router,
     routing::get,
-    extract::{State, ws::{WebSocket, WebSocketUpgrade}},
-    response::IntoResponse,
-    extract::ws::Message,
-    Json,
+    Router,
 };
 
 use tower_http::services::ServeDir;
-use state::AppState;
 
 mod db;
-mod models;
 mod api;
 mod state;
+mod models;
 mod websocket;
+
+use state::AppState;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -41,70 +43,57 @@ struct ConnEvent {
     newstate: u32,
 
     comm: [u8; 16],
-    } 
-
-fn bytes_to_string(bytes: &[u8]) -> String {
-    let len = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len()); 
-    String::from_utf8_lossy(&bytes[..len]).to_string() 
 }
 
 async fn connections_handler(
-    State(state): State<AppState>,
-) -> Json<Vec<api::ConnectionRow>> {
+    axum::extract::State(state): axum::extract::State<AppState>,
+) -> axum::Json<Vec<api::ConnectionRow>> {
     let conn = state.db.lock().unwrap();
 
-    Json(db::get_connections(&conn).unwrap_or_default())
-}
-
-async fn ws_handler(
-    ws: WebSocketUpgrade,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_socket(socket, state.tx))
-}
-
-async fn handle_socket(
-    mut socket: WebSocket,
-    tx: broadcast::Sender<String>,
-) {
-    let mut rx = tx.subscribe();
-
-    loop {
-        tokio::select! {
-            msg = rx.recv() => {
-                if let Ok(text) = msg {
-                    if socket.send(Message::Text(text.into())).await.is_err() {
-                        break;
-                    }
-                }
-            }
-        }
-    }
+    axum::Json(
+        db::get_connections(&conn)
+            .unwrap_or_default()
+    )
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let obj_path = Path::new("ebpf/connect.bpf.o");
 
-    let (tx, _) = broadcast::channel::<String>(1000);
-    let tx_ringbuf = tx.clone();
+    let obj_path =
+        Path::new("ebpf/connect.bpf.o");
 
-    let open_obj = ObjectBuilder::default().open_file(obj_path)?;
-    let mut obj = open_obj.load()?;
+    let open_obj =
+        ObjectBuilder::default()
+            .open_file(obj_path)?;
+
+    let mut obj =
+        open_obj.load()?;
 
     let mut links = Vec::new();
+
     for prog in obj.progs_mut() {
-        links.push(prog.attach()?);
+        links.push(
+            prog.attach()?
+        );
     }
 
-    let db_conn = Arc::new(Mutex::new(db::init_db()?));
+    let db_conn =
+        Arc::new(
+            Mutex::new(
+                db::init_db()?
+            )
+        );
+
+    let (tx, _) =
+        broadcast::channel::<String>(1000);
 
     let state = AppState {
         db: db_conn.clone(),
         tx: tx.clone(),
     };
 
-    let mut ringbuf = RingBufferBuilder::new();
+    let mut ringbuf_builder =
+        RingBufferBuilder::new();
 
     let events_map = obj
         .maps()
@@ -114,100 +103,159 @@ async fn main() -> Result<()> {
     let tx_ring = tx.clone();
     let db_clone = db_conn.clone();
 
-    ringbuf.add(&events_map, move |data: &[u8]| {
-        if data.len() < std::mem::size_of::<ConnEvent>() {
-            return 0;
-        }
+    ringbuf_builder.add(
+        &events_map,
+        move |data: &[u8]| {
 
-        let event = unsafe {
-            &*(data.as_ptr() as *const ConnEvent)
-        };
+            if data.len()
+                < std::mem::size_of::<ConnEvent>()
+            {
+                return 0;
+            }
 
-        let src = Ipv4Addr::from(event.saddr.to_be());
-        let dst = Ipv4Addr::from(event.daddr.to_be());
-        
-        let ws_event = models::WsConnectionEvent {
-    pid: event.pid,
+            let event = unsafe {
+                &*(data.as_ptr()
+                    as *const ConnEvent)
+            };
 
-    src_ip: src.to_string(),
-    dst_ip: dst.to_string(),
+            let src =
+                Ipv4Addr::from(
+                    event.saddr.to_be()
+                );
 
-    src_port: event.sport,
-    dst_port: event.dport,
+            let dst =
+                Ipv4Addr::from(
+                    event.daddr.to_be()
+                );
 
-    old_state: event.oldstate,
-    new_state: event.newstate,
-};
+            let record =
+                models::Connection {
 
+                    pid: event.pid,
 
-if let Ok(json) = serde_json::to_string(&ws_event) {
-    let _ = tx_ringbuf.send(json);
-}
+                    timestamp:
+                        Utc::now()
+                            .timestamp(),
 
-        let ws_event = serde_json::json!({
-    "pid": event.pid,
-    "src_ip": src.to_string(),
-    "dst_ip": dst.to_string(),
-    "src_port": event.sport,
-    "dst_port": event.dport,
-    "old_state": event.oldstate,
-    "new_state": event.newstate
-});
+                    src_ip:
+                        src.to_string(),
 
-let _ = tx_ringbuf.send(ws_event.to_string());
+                    dst_ip:
+                        dst.to_string(),
 
-        let record = models::Connection {
-            timestamp: Utc::now().timestamp(),
-            src_ip: src.to_string(),
-            dst_ip: dst.to_string(),
-            src_port: event.sport,
-            dst_port: event.dport,
-            old_state: event.oldstate,
-            new_state: event.newstate,
-        };
+                    src_port:
+                        event.sport,
 
-let ws_event = api::ConnectionRow {
-    id: 0,
-    timestamp: record.timestamp,
+                    dst_port:
+                        event.dport,
 
-    src_ip: record.src_ip.clone(),
-    dst_ip: record.dst_ip.clone(),
+                    old_state:
+                        event.oldstate,
 
-    src_port: record.src_port,
-    dst_port: record.dst_port,
+                    new_state:
+                        event.newstate,
+                };
 
-    old_state: record.old_state,
-    new_state: record.new_state,
-};
+            if let Ok(conn)
+                = db_clone.lock()
+            {
+                let _ =
+                    db::insert_connection(
+                        &conn,
+                        &record,
+                    );
+            }
 
-        if let Ok(conn) = db_clone.lock() {
-            let _ = db::insert_connection(&conn, &record);
-        }
-        
-        if let Ok(json) = serde_json::to_string(&ws_event) {
-    let _ = tx_ringbuf.send(json);
-}
-        
-        0
-    })?;
+            let ws_event =
+                api::ConnectionRow {
 
-    let ringbuf = ringbuf.build()?;
+                    id: 0,
 
-    let app = Router::new()
-        .route("/connections", get(connections_handler))
-        .route("/ws", get(websocket::ws_handler))
-        .fallback_service(ServeDir::new("web"))
-        .with_state(state);
+                    pid: record.pid,
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
+                    timestamp:
+                        record.timestamp,
+
+                    src_ip:
+                        record.src_ip.clone(),
+
+                    dst_ip:
+                        record.dst_ip.clone(),
+
+                    src_port:
+                        record.src_port,
+
+                    dst_port:
+                        record.dst_port,
+
+                    old_state:
+                        record.old_state,
+
+                    new_state:
+                        record.new_state,
+                };
+
+            if let Ok(json)
+                = serde_json::to_string(
+                    &ws_event
+                )
+            {
+                let _ =
+                    tx_ring.send(json);
+            }
+
+            0
+        },
+    )?;
+
+    let ringbuf =
+        ringbuf_builder.build()?;
+
+    let app =
+        Router::new()
+            .route(
+                "/connections",
+                get(connections_handler),
+            )
+            .route(
+                "/ws",
+                get(
+                    websocket::ws_handler
+                ),
+            )
+            .fallback_service(
+                ServeDir::new("web")
+            )
+            .with_state(state);
+
+    let listener =
+        tokio::net::TcpListener::bind(
+            "0.0.0.0:3000",
+        )
+        .await?;
 
     tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
+
+        axum::serve(
+            listener,
+            app,
+        )
+        .await
+        .unwrap();
+
     });
 
-    println!("NetWatch running...");
+    println!(
+        "NetWatch running on :3000"
+    );
 
     loop {
-        ringbuf.poll(std::time::Duration::from_millis(100))?;
+
+        ringbuf.poll(
+            std::time::Duration::from_millis(
+                100
+            )
+        )?;
+
     }
 }

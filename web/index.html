@@ -1,10 +1,65 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>NetWatch Live Dashboard</title>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+}
+
+h1 {
+    margin-bottom: 10px;
+}
+
+#status {
+    margin-bottom: 10px;
+    font-weight: bold;
+}
+
+#count {
+    margin-bottom: 20px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th {
+    background: #333;
+    color: white;
+}
+
+th, td {
+    padding: 8px;
+    border: 1px solid #ddd;
+    text-align: left;
+}
+
+tbody tr:nth-child(even) {
+    background: #f4f4f4;
+}
+</style>
+
+</head>
 <body>
 
-<h1>NetWatch Live</h1>
+<h1>NetWatch Live Dashboard</h1>
 
-<table id="connections" border="1">
+<div id="status">
+    WebSocket: Connecting...
+</div>
+
+<div id="count">
+    Connections: 0
+</div>
+
+<table>
     <thead>
         <tr>
             <th>PID</th>
@@ -13,37 +68,91 @@
             <th>Destination IP</th>
             <th>Destination Port</th>
             <th>State</th>
+            <th>Timestamp</th>
         </tr>
     </thead>
 
-    <tbody>
+    <tbody id="connections-body">
     </tbody>
 </table>
 
 <script>
+
+const tbody =
+    document.getElementById(
+        "connections-body"
+    );
+
+const statusEl =
+    document.getElementById(
+        "status"
+    );
+
+const countEl =
+    document.getElementById(
+        "count"
+    );
+
+let totalConnections = 0;
+
+function updateCounter() {
+    countEl.textContent =
+        `Connections: ${totalConnections}`;
+}
+
 function tcpState(state) {
-    switch (state) {
-        case 1: return "ESTABLISHED";
-        case 2: return "SYN_SENT";
-        case 3: return "SYN_RECV";
-        case 4: return "FIN_WAIT1";
-        case 5: return "FIN_WAIT2";
-        case 6: return "TIME_WAIT";
-        case 7: return "CLOSE";
-        case 8: return "CLOSE_WAIT";
-        case 9: return "LAST_ACK";
-        case 10: return "LISTEN";
-        case 11: return "CLOSING";
-        default: return state;
+
+    switch(state) {
+
+        case 1:
+            return "ESTABLISHED";
+
+        case 2:
+            return "SYN_SENT";
+
+        case 3:
+            return "SYN_RECV";
+
+        case 4:
+            return "FIN_WAIT1";
+
+        case 5:
+            return "FIN_WAIT2";
+
+        case 6:
+            return "TIME_WAIT";
+
+        case 7:
+            return "CLOSE";
+
+        case 8:
+            return "CLOSE_WAIT";
+
+        case 9:
+            return "LAST_ACK";
+
+        case 10:
+            return "LISTEN";
+
+        case 11:
+            return "CLOSING";
+
+        default:
+            return state;
     }
 }
 
-const ws = new WebSocket("ws://localhost:3000/ws");
+function addRow(conn) {
 
-ws.onmessage = (event) => {
-    const conn = JSON.parse(event.data);
+    const row =
+        document.createElement("tr");
 
-    const row = document.createElement("tr");
+    const timestamp =
+        conn.timestamp
+        ? new Date(
+            conn.timestamp * 1000
+          ).toLocaleString()
+        : "-";
 
     row.innerHTML = `
         <td>${conn.pid}</td>
@@ -51,13 +160,117 @@ ws.onmessage = (event) => {
         <td>${conn.src_port}</td>
         <td>${conn.dst_ip}</td>
         <td>${conn.dst_port}</td>
-        <td>${conn.old_state} &rarr; ${conn.new_state}</td>
+        <td>
+            ${tcpState(conn.old_state)}
+            →
+            ${tcpState(conn.new_state)}
+        </td>
+        <td>${timestamp}</td>
     `;
 
-    document
-        .querySelector("#connections tbody")
-        .prepend(row);
-};
+    tbody.prepend(row);
+
+    totalConnections++;
+    updateCounter();
+
+    while (tbody.rows.length > 500) {
+        tbody.deleteRow(
+            tbody.rows.length - 1
+        );
+    }
+}
+
+async function loadHistory() {
+
+    try {
+
+        const response =
+            await fetch(
+                "/connections"
+            );
+
+        const data =
+            await response.json();
+
+        data.reverse();
+
+        data.forEach(addRow);
+
+    } catch (err) {
+
+        console.error(
+            "History load failed",
+            err
+        );
+    }
+}
+
+function connectWebSocket() {
+
+    statusEl.textContent =
+        "WebSocket: Connecting...";
+
+    const protocol =
+        location.protocol === "https:"
+        ? "wss:"
+        : "ws:";
+
+    const ws =
+        new WebSocket(
+            `${protocol}//${location.host}/ws`
+        );
+
+    ws.onopen = () => {
+
+        statusEl.textContent =
+            "WebSocket: Connected";
+    };
+
+    ws.onmessage = (event) => {
+
+        try {
+
+            const conn =
+                JSON.parse(
+                    event.data
+                );
+
+            addRow(conn);
+
+        } catch (err) {
+
+            console.error(
+                "Invalid message",
+                err
+            );
+        }
+    };
+
+    ws.onclose = () => {
+
+        statusEl.textContent =
+            "WebSocket: Disconnected";
+
+        setTimeout(
+            connectWebSocket,
+            2000
+        );
+    };
+
+    ws.onerror = (err) => {
+
+        console.error(
+            "WebSocket error",
+            err
+        );
+
+        ws.close();
+    };
+}
+
+loadHistory();
+connectWebSocket();
+
 </script>
 
 </body>

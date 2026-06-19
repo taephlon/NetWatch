@@ -1,8 +1,10 @@
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ConnectionRow {
     pub id: i64,
+
+    pub pid: u32,
 
     pub timestamp: i64,
 
@@ -14,11 +16,4 @@ pub struct ConnectionRow {
 
     pub old_state: u32,
     pub new_state: u32,
-}
-
-#[derive(Serialize)]
-pub struct Stats {
-    pub total_connections: u64,
-    pub unique_destinations: u64,
-    pub unique_ports: u64,
 }
