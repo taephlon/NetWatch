@@ -34,7 +34,13 @@ pub fn init_db() -> Result<Connection> {
             new_state INTEGER NOT NULL,
 
             risk_score INTEGER,
-            threat_label TEXT
+            threat_label TEXT,
+
+            threat_source TEXT,
+            threat_confidence INTEGER,
+
+            country TEXT,
+            city TEXT
         )
         ",
         [],
@@ -147,6 +153,12 @@ pub fn get_connections(
 
             risk_score: row.get(12)?,
             threat_label: row.get(13)?,
+
+            threat_source: row.get(14)?,
+            threat_confidence: row.get(15)?,
+
+            country: row.get(16)?,
+            city: row.get(17)?,
         })
 
     })?;

@@ -44,6 +44,18 @@ th, td {
 tbody tr:nth-child(even) {
     background: #f4f4f4;
 }
+
+#alerts {
+    margin-bottom: 20px;
+}
+
+.alert {
+    padding: 10px;
+    margin: 5px 0;
+    border-left: 5px solid red;
+    background: #ffe5e5;
+    font-family: monospace;
+}
 </style>
 
 </head>
@@ -59,6 +71,12 @@ tbody tr:nth-child(even) {
     Connections: 0
 </div>
 
+<h2>Live Alerts</h2>
+
+<div id="alerts"></div>
+
+<hr>
+
 <table>
     <thead>
         <tr>
@@ -69,10 +87,13 @@ tbody tr:nth-child(even) {
             <th>Process</th>
             <th>Executable</th>
             <th>Hostname</th>
+            <th>Country</th>
+            <th>City</th>
             <th>Destination Port</th>
             <th>State</th>
             <th>Threat</th>
             <th>Risk</th>
+            <th>Level</th>
             <th>Timestamp</th>
         </tr>
     </thead>
@@ -147,6 +168,17 @@ function tcpState(state) {
     }
 }
 
+function threatColor(confidence) {
+
+    if (confidence >= 90)
+        return "#ff0000";
+
+    if (confidence >= 70)
+        return "#ff8800";
+
+    return "#00ff00";
+}
+
 function addRow(conn) {
 
     const row =
@@ -167,6 +199,8 @@ function addRow(conn) {
         <td>${conn.process_name}</td>
         <td>${conn.executable}</td>
         <td>${conn.hostname}</td>
+        <td>${conn.country}</td>
+        <td>${conn.city}</td>
         <td>${conn.dst_port}</td>
         <td>
             ${tcpState(conn.old_state)}
@@ -175,6 +209,9 @@ function addRow(conn) {
         </td>
         <td>${conn.risk_score}</td>
         <td>${conn.threat_label}</td>
+        <td style="color:${threatColor(conn.threat_confidence)}">
+    ${conn.threat_label}
+  </td>
         <td>${timestamp}</td>
     `;
 
@@ -241,9 +278,25 @@ function connectWebSocket() {
         try {
 
             const conn =
-                JSON.parse(
-                    event.data
+                JSON.parse(event.data
                 );
+
+          if (conn.risk_score >= 70) {
+
+    const alert = document.createElement("div");
+
+    alert.className = "alert";
+
+    alert.innerHTML = `
+        <strong>${conn.threat_label}</strong><br>
+        ${conn.dst_ip}<br>
+        Risk Score: ${conn.risk_score}
+    `;
+
+    document
+        .getElementById("alerts")
+        .prepend(alert);
+}
 
             addRow(conn);
 

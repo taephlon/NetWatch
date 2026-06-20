@@ -22,7 +22,14 @@ pub struct Connection {
     pub hostname: String,
 
     pub risk_score: u8,
-    pub threat_label: String
+    pub threat_label: String,
+    
+    pub threat_source: String,
+    pub threat_confidence: u8,
+
+    pub country: String,
+    pub city: String,
+
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -25,6 +25,8 @@ mod websocket;
 mod dns;
 mod process;
 mod threat;
+mod threatintel;
+mod geoip;
 
 use state::AppState;
 
@@ -135,8 +137,13 @@ async fn main() -> Result<()> {
                 dns::reverse_lookup(
                      &dst.to_string()
              );
+
+            let geo =
+                geoip::lookup(
+                    &dst.to_string()
+                );
     
-            let (risk_score, threat_label) =
+            let (risk_score, threat_label, threat_source, threat_confidence,) =
                 threat::classify(
                   &hostname,
                     event.dport,
@@ -184,7 +191,13 @@ async fn main() -> Result<()> {
                     hostname,
 
                     risk_score,
-                    threat_label
+
+                    threat_label,
+                    threat_source,
+                    threat_confidence,
+
+                    country: geo.country.clone(),
+                    city: geo.city.clone(),
                 };
 
             if let Ok(conn)
@@ -234,6 +247,11 @@ async fn main() -> Result<()> {
                     risk_score: record.risk_score,
                     threat_label: record.threat_label.clone(),
 
+                    threat_source: record.threat_source.clone(),
+                    threat_confidence: record.threat_confidence,
+
+                    country: record.country.clone(),
+                    city: record.city.clone(),
                 };
 
             if let Ok(json)
