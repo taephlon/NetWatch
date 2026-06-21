@@ -16,3 +16,10 @@
 
 #gitignore
 .gitignore
+
+#Zipped Files
+*.tar.gz
+*.tar.xz
+
+#GeoIP data folder
+/data/

@@ -7,7 +7,6 @@ pub struct Connection {
     pub process_name: String,
     pub executable: String,
 
-
     pub timestamp: i64,
 
     pub src_ip: String,

@@ -27,6 +27,8 @@ mod process;
 mod threat;
 mod threatintel;
 mod geoip;
+mod threat_feed;
+mod feed_updater;
 
 use state::AppState;
 
@@ -73,6 +75,9 @@ async fn main() -> Result<()> {
 
     let mut obj =
         open_obj.load()?;
+    
+    let feed =
+    threat_feed::ThreatFeed::new();
 
     let mut links = Vec::new();
 
@@ -97,6 +102,13 @@ async fn main() -> Result<()> {
         tx: tx.clone(),
     };
 
+    tokio::spawn(async {
+
+    feed_updater::scheduler()
+        .await;
+
+    });
+
     let mut ringbuf_builder =
         RingBufferBuilder::new();
 
@@ -107,6 +119,9 @@ async fn main() -> Result<()> {
 
     let tx_ring = tx.clone();
     let db_clone = db_conn.clone();
+
+    let feed = Arc::new(feed);
+    let feed_clone = feed.clone();
 
     ringbuf_builder.add(
         &events_map,
@@ -133,21 +148,53 @@ async fn main() -> Result<()> {
                     event.daddr.to_be()
                 );
 
+            let src_ip = src.to_string();
+            let dst_ip = dst.to_string();
+
+            let malicious =
+                feed_clone.check_ip(
+                    &dst_ip
+                );            
+
             let hostname =
                 dns::reverse_lookup(
-                     &dst.to_string()
+                     &dst_ip
              );
 
             let geo =
                 geoip::lookup(
-                    &dst.to_string()
+                    &dst_ip
                 );
     
-            let (risk_score, threat_label, threat_source, threat_confidence,) =
+            let (
+                mut risk_score, 
+                mut threat_label, 
+                mut threat_source, 
+                mut threat_confidence,
+                ) =
                 threat::classify(
                   &hostname,
                     event.dport,
                 );
+
+            if malicious {
+    risk_score = 100;
+
+    threat_label =
+        "KNOWN_MALICIOUS_IP"
+            .to_string();
+
+    threat_source =
+        "Threat Feed"
+            .to_string();
+
+    threat_confidence = 100;
+
+    println!(
+        "[ALERT] Malicious IP: {}",
+        dst_ip
+    );
+}
 
             let process_name =
                 process::process_name(event.pid);
@@ -155,13 +202,13 @@ async fn main() -> Result<()> {
             let executable =
                 process::executable(event.pid);
 
-            let dst =
-                Ipv4Addr::from(event.daddr.to_be());
-
             let record =
                 models::Connection {
 
                     pid: event.pid,
+
+                    src_ip: src_ip.clone(),
+                    dst_ip: dst_ip.clone(),
 
                     process_name,
                     executable,
@@ -169,12 +216,6 @@ async fn main() -> Result<()> {
                     timestamp:
                         Utc::now()
                             .timestamp(),
-
-                    src_ip:
-                        src.to_string(),
-
-                    dst_ip:
-                        dst.to_string(),
 
                     src_port:
                         event.sport,

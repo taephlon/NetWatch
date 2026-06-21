@@ -254,6 +254,7 @@ async function loadHistory() {
 
 function connectWebSocket() {
 
+
     statusEl.textContent =
         "WebSocket: Connecting...";
 
@@ -281,7 +282,29 @@ function connectWebSocket() {
                 JSON.parse(event.data
                 );
 
-          if (conn.risk_score >= 70) {
+          if (
+    conn.threat_label ===
+    "KNOWN_MALICIOUS_IP"
+) {
+    const alert =
+        document.createElement("div");
+
+    alert.className = "alert";
+
+    alert.innerHTML = `
+        <strong>
+            MALICIOUS CONNECTION DETECTED
+        </strong><br>
+        IP: ${conn.dst_ip}<br>
+        Threat: ${conn.threat_label}
+    `;
+
+    document
+        .getElementById("alerts")
+        .prepend(alert);
+}
+
+          if (conn.threat_label === "KNOWN_MALICIOUS_IP") {
 
     const alert = document.createElement("div");
 
